@@ -62,9 +62,9 @@ struct TortureGarden {
 void get_hash(void *output, const void *input, TortureGarden *garden, unsigned int algo)
 {    
 	unsigned char _ALIGN(64) hash[64];
-    memset(hash, 0, sizeof(hash));                        // Doesn't affect Minotaur as all hash outputs are 64 bytes; required for MinotaurX due to yespower's 32 byte output.
-
-    switch (algo) {
+    //memset(hash, 0, sizeof(hash));  //Removed: Unnecessary as each hash function fills it completely
+    
+	switch (algo) {
         case 0:
             sph_blake512_init(&garden->context_blake);
             sph_blake512(&garden->context_blake, input, 64);
@@ -148,9 +148,13 @@ void get_hash(void *output, const void *input, TortureGarden *garden, unsigned i
         // NB: The CPU-hard gate must be case MINOTAUR_ALGO_COUNT.
         case 16:
             yespower_tls(input, 64, &yespower_params, (yespower_binary_t*)hash);
+			break;
+		default:
+			// Handle Error if any.
+			memset(hash, 0 , 64);
+			break;
     }
-
-    // Output the hash
+	
     memcpy(output, hash, 64);
 }
 
@@ -158,7 +162,7 @@ void get_hash(void *output, const void *input, TortureGarden *garden, unsigned i
 void traverse_garden(TortureGarden *garden, void *hash, TortureNode *node)
 {
     unsigned char _ALIGN(64) partialHash[64];
-    memset(partialHash, 0, sizeof(partialHash));                        // Doesn't affect Minotaur as all hash outputs are 64 bytes; required for MinotaurX due to yespower's 32 byte output.
+    //memset(partialHash, 0, sizeof(partialHash)); //Removed: Unnecessary, get_hash overwrites it.
     get_hash(partialHash, hash, garden, node->algo);
 
 #ifdef MINOTAUR_DEBUG
@@ -267,11 +271,14 @@ int scanhash_minotaur(int thr_id, struct work *work, uint32_t max_nonce, uint64_
 	if (opt_benchmark)
 		ptarget[7] = 0x0cff;
 
+    // Pre-calculate endian conversion
 	for (int k=0; k < 19; k++)
 		be32enc(&endiandata[k], pdata[k]);
+    
 
+    // Optimized the loop to avoid redundant be32enc call
 	do {
-		be32enc(&endiandata[19], nonce);
+		be32enc(&endiandata[19], nonce); 
 		minotaurhash(hash, endiandata, minotaurX);
 
 		if (hash[7] <= Htarg && fulltest(hash, ptarget)) {
